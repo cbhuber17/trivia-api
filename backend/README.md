@@ -10,6 +10,11 @@ Note: The instructions below are for a Windows 10 platform.
 
 Follow instructions to install the latest version of python for your platform in the [python docs](https://docs.python.org/3/using/unix.html#getting-and-installing-the-latest-version-of-python)
 
+##### Python 3.8 mod
+
+Go into backend\env\Lib\site-packages\sqlalchemy\util\compat.py and follow the instructions here: https://knowledge.udacity.com/questions/132762#132817
+Also: pip install --upgrade Werkzeug
+
 #### Virtual Environment
 
 We recommend working within a virtual environment whenever using Python for projects. This keeps your dependencies for each project separate and organized. Instructions for setting up a virtual environment for your platform can be found in the [python docs](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)
