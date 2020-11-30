@@ -58,13 +58,23 @@ def create_app(test_config=None):
         all_categories_from_db = db.session.query(Category).all()
         all_categories = {}
 
-        # Extract from backend db and put in format for front end
-        # Format: {int id: string category} (for each category)
-        # TODO: Use Category.format already built in models
-        for category_from_db in all_categories_from_db:
-            all_categories[int(category_from_db.id)] = category_from_db.type
+        # Throw an error if there are no categories in the db
+        if len(all_categories_from_db) == 0:
+            abort(404)
 
-        return jsonify(all_categories)
+        # Extract categories from backend db and put in format for front end
+        for category_from_db in all_categories_from_db:
+            all_categories[category_from_db.id] = category_from_db.type
+
+        # Send API data the format the front end requires in frontend\src\components\FormView.js
+        result = {}
+        result['categories'] = all_categories
+        result['success'] = True
+
+        # TODO: This may not be needed as I don't see any references/uses in the front end
+        # result['total_categories'] = len(all_categories)
+
+        return jsonify(result)
 
     '''
     @TODO:
@@ -83,24 +93,45 @@ def create_app(test_config=None):
 
         result = {}
 
-        # TOOD: Use Question.format in models (?)
+        # Get the questions from the db
         all_questions_from_db = db.session.query(Question).all()
         all_questions = []
 
+        # Throw an error if there are no questions in the db
+        if len(all_questions_from_db) == 0:
+            abort(404)
+
+        # Format the question objects for frontend\src\components\QuestionView.js
         for question_from_db in all_questions_from_db:
-            all_questions.append(question_from_db.question)
+            all_questions.append(question_from_db.format())
 
-        result['questions'] = all_questions
-        result['num questions'] = len(all_questions)
+        # Pagination
+        # Get the value of key 'page' from the request.args object
+        # The second argument 1 is default if 'page' does not exist
+        # TODO: make into function?
+        page = request.args.get('page', 1, type=int)
+        start = (page-1)*QUESTIONS_PER_PAGE
+        end = start+QUESTIONS_PER_PAGE
 
-        # TODO: Use built in Category.format in models
+        result['questions'] = all_questions[start:end]
+        result['total_questions'] = len(all_questions)
+
+        # Get the categories from the db
         all_categories_from_db = db.session.query(Category).all()
-        all_categories = []
-        for category_from_db in all_categories_from_db:
-            all_categories.append(category_from_db.type)
+        all_categories = {}
 
-        result['current category'] = all_categories[0]
+        # Throw an error if there are no categories in the db
+        if len(all_categories_from_db) == 0:
+            abort(404)
+
+        # Extract categories from backend db and put in format for front end
+        for category_from_db in all_categories_from_db:
+            all_categories[category_from_db.id] = category_from_db.type
+
+        result['current_category'] = None
         result['categories'] = all_categories
+
+        result['success'] = True
 
         return jsonify(result)
 
@@ -111,32 +142,27 @@ def create_app(test_config=None):
     TEST: When you click the trash icon next to a question, the question will be removed.
     This removal will persist in the database and when you refresh the page.
     '''
-    @app.route('/questions/<int:id>', methods=['DELETE'])
+    @ app.route('/questions/<int:id>', methods=['DELETE'])
     def delete_question(id):
 
-        # TODO: Activate code when ready to test delete functionality
-        # error = False
-        # question = Question.query.get(id)
+        error = False
+        question = Question.query.get(id)
 
-        # try:
-        #     db.session.delete(question)
-        #     db.session.commit()
-        # except:
-        #     error = True
-        #     db.session.rollback()
-        #     print(sys.exc_info())
-        # finally:
-        #     db.session.close()
+        try:
+            db.session.delete(question)
+            db.session.commit()
+        except:
+            error = True
+            db.session.rollback()
+            print(sys.exc_info())
+        finally:
+            db.session.close()
 
-        # if error:
-        #     flash('An error occurred attempting to delete the question.')
-        # else:
-        #     flash('Question was deleted.')
-
-        # TODO: Decide if page should be redirected or just return a message
-        # return redirect(url_for('pages/home.html'))
-
-        return jsonify({'code': 'deleted'})
+        if error:
+            abort(422)
+        else:
+            # TODO: also add key value pair: 'deleted_question': id
+            return jsonify({'success': True})
 
     '''
     @TODO:
@@ -148,41 +174,40 @@ def create_app(test_config=None):
     the form will clear and the question will appear at the end of the last page
     of the questions list in the "List" tab.
     '''
-    @app.route('/questions', methods=['POST'])
+    @ app.route('/questions', methods=['POST'])
     def add_question_to_db():
 
         error = False
+        form_data = request.get_json()
 
-        # TODO: Get the data from the front end forms
-        # try:
-        #     # question = Question(
-        #     #     queston=form.x
-        #     #     answer=form.x
-        #     #     category=form.x
-        #     #     difficulty=form.x
-        #     # )
+        try:
+            question = Question(
+                question=form_data['question'],
+                answer=form_data['answer'],
+                category=form_data['category'],
+                difficulty=int(form_data['difficulty'])
+            )
 
-        #     db.session.add(question)
-        #     db.session.commit()
-        # except:
-        #     error = True
-        #     db.session.rollback()
-        #     print(sys.exc_info())
+            question.insert()
 
-        # finally:
-        #     db.session.close()
+        except:
+            error = True
 
-        # if error:
-        #     flash('ERROR: Question {} could not be added to the db.'.format(form.x))
+            # TODO: Put a rollback function in the models
+            db.session.rollback()
+            print(sys.exc_info())
 
-        #     # TODO: What to do when failing adding to the db
-        #     # return render_template('forms/new_venue.html', form=form)
+        finally:
+            # TODO: need to close session?
+            db.session.close()
 
-        # else:
-        #     flash('SUCCESS! Question {} was added to the db!'.format(form.x))
+        if error:
+            # Throw a 422
+            abort(422)
 
-        #     # TODO: What to do after adding a question
-        #     # return render_template('pages/home.html')
+        else:
+            # TODO: also add key value pair: 'created_question': question.id
+            return jsonify({'success': True})
 
     '''
     @TODO:
@@ -194,21 +219,43 @@ def create_app(test_config=None):
     only question that include that string within their question.
     Try using the word "title" to start.
     '''
-    @app.route('/search', methods=['POST'])
+    @ app.route('/search', methods=['POST'])
     def search_questions():
-        search_term = request.form.get('search_term', '')
+
+        # TODO: Check method in all functions
+        # if not request.method == 'POST':
+        # abort(405)
+
+        data = request.get_json()
+        search_term = data.get('searchTerm')
+
+        # TODO: Do this in other calls when getting data from the front end
+        # if not search_term:
+        #     abort(422)
 
         question_results = Question.query.filter(
             Question.question.ilike('%{}%'.format(search_term))).all()
 
         returned_results = []
+        returned_categories = []
 
         for question in question_results:
-            returned_results.append(question)
+            returned_results.append(question.format())
+            returned_categories.append(question.format()['category'])
+
+        # Pagination
+        # Get the value of key 'page' from the request.args object
+        # The second argument 1 is default if 'page' does not exist
+        # TODO: make into function?
+        page = request.args.get('page', 1, type=int)
+        start = (page-1)*QUESTIONS_PER_PAGE
+        end = start+QUESTIONS_PER_PAGE
 
         response = {}
-        response['num questions'] = len(returned_results)
-        response['questions'] = returned_results
+        response['total_questions'] = len(returned_results)
+        response['questions'] = returned_results[start:end]
+        response['current_category'] = returned_categories
+        response['success'] = True
 
         return jsonify(response)
 
@@ -220,14 +267,32 @@ def create_app(test_config=None):
     categories in the left column will cause only questions of that
     category to be shown.
     '''
-    # TODO: Not sure if category is string or id, currently assuming id
-    @app.route('/questions/<category_id>')
+    @ app.route('/categories/<category_id>/questions')
     def get_questions_category(category_id):
 
         questions_by_category = db.session.query(Question).filter(
             Question.category == category_id).all()
 
-        return jsonify({'data': 'ok'})
+        response = {}
+        response['questions'] = []
+
+        for question in questions_by_category:
+            response['questions'].append(question.format())
+
+        # Pagination
+        # Get the value of key 'page' from the request.args object
+        # The second argument 1 is default if 'page' does not exist
+        # TODO: make into function?
+        page = request.args.get('page', 1, type=int)
+        start = (page-1)*QUESTIONS_PER_PAGE
+        end = start+QUESTIONS_PER_PAGE
+
+        response['questions'] = response['questions'][start:end]
+        response['success'] = True
+        response['total_questions'] = len(response['questions'])
+        response['current_category'] = category_id
+
+        return jsonify(response)
 
     '''
     @TODO:
@@ -240,28 +305,39 @@ def create_app(test_config=None):
     one question at a time is displayed, the user is allowed to answer
     and shown whether they were correct or not.
     '''
-    @app.route('/play/<category_id>/<prev_question_id>', methods=['POST'])
-    def play_trivia_game(category_id, prev_question_id):
+    @ app.route('/quizzes', methods=['POST'])
+    def play_trivia_game():
+
+        data = request.get_json()
+        previous_questions_id = data['previous_questions']
+        category_id = data['quiz_category']['id']
 
         # TODO: error handling if question or category doesn't exist
 
-        questions_by_category = db.session.query(Question).filter(
-            Question.category == category_id).all()
+        if category_id == 0:
+            questions_by_category = Question.query.all()
+        else:
+
+            # TODO: Not query by db.session
+            questions_by_category = db.session.query(Question).filter(
+                Question.category == category_id).all()
 
         questions_to_play = []
 
         for question in questions_by_category:
 
-            # Don't add previous question to the list
-            if prev_question_id == question.id:
+            # Don't add previous questions to the list to play
+            if question.id in previous_questions_id:
                 continue
 
-            else:
-                questions_to_play.append(question.question)
+            questions_to_play.append(question)
 
-        random_question = random.choice(questions_to_play)
+        if len(questions_to_play) > 0:
+            random_question = random.choice(questions_to_play).format()
+        else:
+            random_question = None
 
-        return jsonify({'question': random_question})
+        return jsonify({'success': True, 'question': random_question})
 
     '''
     @TODO:
@@ -269,14 +345,12 @@ def create_app(test_config=None):
     including 404 and 422.
     '''
 
-    # TODO: Test this after 404 works below
-    # def html_code_error(error_code, error_message):
-    #     @app.errorhandler(error_code)
-    #     def specific_html_error(error):
-    #     return jsonify({'success': False, 'error': error_code, 'message': error_message})
+    @ app.errorhandler(404)
+    def not_found(error):
+        return jsonify({'success': False, 'error': 404, 'message': 'Not found'}), 404
 
-    @app.errorhandler(404)
-    def not_found(error):  # TODO: what is error?
-        return jsonify({'success': False, 'error': 404, 'message': 'Not found'})
+    @app.errorhandler(422)
+    def unprocessable(error):
+        return jsonify({'success': False, 'error': 422, 'message': 'Not processable'}), 422
 
     return app
