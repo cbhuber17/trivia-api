@@ -5,7 +5,7 @@ from flask_cors import CORS
 import random
 import sys
 
-from models import setup_db, db, Question, Category
+from models import setup_db, Question, Category
 
 QUESTIONS_PER_PAGE = 10
 
@@ -47,7 +47,7 @@ def create_app(test_config=None):
     # -----------------------------------------------------------------------------------------------------------
 
     @app.route('/categories')
-    def get_reqest_all_categories():
+    def get_request_all_categories():
         ''' Endpoint to handle GET requests for all available categories. '''
 
         if request.method != 'GET':
@@ -131,20 +131,25 @@ def create_app(test_config=None):
         error = False
         question = Question.query.get(id)
 
-        try:
-            question.delete()
-        except:
-            error = True
-            question.cancel()
-            print(sys.exc_info())
-        finally:
-            question.close()
+        if question is not None:
 
-        if error:
-            abort(422)
+            try:
+                question.delete()
+            except:
+                error = True
+                question.cancel()
+                print(sys.exc_info())
+            finally:
+                question.close()
+
+            if error:
+                abort(422)
+            else:
+                return jsonify({'success': True, 'deleted_question': id})
+
         else:
-            # TODO: also add key value pair (for completeness): 'deleted_question': id
-            return jsonify({'success': True})
+            # ID not found!
+            abort(404)
 
     # -----------------------------------------------------------------------------------------------------------
 
@@ -160,7 +165,7 @@ def create_app(test_config=None):
         error = False
         form_data = request.get_json()
 
-        if not form_data['question'] or not form_data['answer']:
+        if not form_data:
             abort(400)
 
         try:
@@ -182,11 +187,9 @@ def create_app(test_config=None):
             question.close()
 
         if error:
-            # Throw a 422
             abort(422)
 
         else:
-            # TODO: also add key value pair: 'created_question_id': question.id
             return jsonify({'success': True})
 
     # -----------------------------------------------------------------------------------------------------------
@@ -237,6 +240,9 @@ def create_app(test_config=None):
 
         questions_by_category = Question.query.filter(
             Question.category == category_id).all()
+
+        if not questions_by_category:
+            abort(400)
 
         response = {}
         response['questions'] = []
